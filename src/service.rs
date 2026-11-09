@@ -55,11 +55,18 @@ impl ServiceManager {
     /// 启动服务：冲突检查 → 布局 → 注册 → 自启 → 拉起进程。
     pub fn start_service(&self) -> Result<()> {
         self.ensure_available("启动服务")?;
+        let hub = self.hub_exe();
+        if !hub.is_file() {
+            bail!("便携包缺少 Moodflow Hub，请重新下载完整包");
+        }
+        if process::exists_elsewhere(&hub) {
+            bail!("请先关闭其他目录中的 Moodflow Hub，再启动便携版");
+        }
 
         if self.service_running() {
             // RPC 可用：若是我们自己的服务进程，已在运行直接返回。
             if process::exists_by_path(&self.cfg.service_exe) {
-                return Ok(());
+                return self.start_hub();
             }
             // 否则是占据管道的他处残留实例，先关闭。
             self.shutdown_stale_service();
@@ -86,6 +93,22 @@ impl ServiceManager {
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| anyhow!("启动服务进程失败: {e}"))?;
+        self.start_hub()
+    }
+
+    fn hub_exe(&self) -> std::path::PathBuf {
+        self.cfg.service_exe.with_file_name("moodflow_hub.exe")
+    }
+    fn start_hub(&self) -> Result<()> {
+        let hub = self.hub_exe();
+        if !process::exists_by_path(&hub) {
+            Command::new(&hub)
+                .arg("--background")
+                .current_dir(hub.parent().unwrap())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| anyhow!("启动 Moodflow Hub 失败: {e}"))?;
+        }
         Ok(())
     }
 
@@ -93,6 +116,9 @@ impl ServiceManager {
     pub fn stop_service(&self) -> Result<bool> {
         self.ensure_available("停止服务")?;
         self.set_stopped_flag();
+        // Only our own directory: never terminate an installed Hub or another portable copy.
+        process::terminate_by_path(&self.hub_exe());
+        process::terminate_by_path(&self.cfg.setting_exe);
 
         let was_running = self.service_running();
         let was_registered = self.is_registered();
