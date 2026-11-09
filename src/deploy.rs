@@ -70,7 +70,7 @@ pub fn deploy_from_zip(zip_path: &Path, target_dir: &Path) -> Result<bool> {
             Some(top) => rel.strip_prefix(top).unwrap_or(&rel).to_path_buf(),
             None => rel,
         };
-        if rel.as_os_str().is_empty() {
+        if rel.as_os_str().is_empty() || skip_in_copy(&rel) {
             continue;
         }
         let dst = target_dir.join(&rel);
@@ -104,7 +104,7 @@ pub fn deploy_from_directory(src_dir: &Path, target_dir: &Path) -> Result<()> {
         bail!("源目录与目标目录相同");
     }
     let mut files = Vec::new();
-    collect_files(src_dir, &mut files).map_err(|e| anyhow!("枚举源文件失败: {e}"))?;
+    collect_files(src_dir, src_dir, &mut files).map_err(|e| anyhow!("枚举源文件失败: {e}"))?;
     for src in files {
         let rel = src.strip_prefix(src_dir).unwrap_or(&src);
         if skip_in_copy(rel) {
@@ -164,7 +164,7 @@ fn skip_in_copy(rel: &Path) -> bool {
         return false;
     };
     let first = first.as_os_str().to_string_lossy();
-    if first.eq_ignore_ascii_case("userdata") {
+    if first.eq_ignore_ascii_case("userdata") || first.eq_ignore_ascii_case("localdata") {
         return true; // userdata 整个目录（含所有子层级）
     }
     comps.next().is_none() && first.eq_ignore_ascii_case("uninstall.exe")
@@ -179,7 +179,7 @@ fn extract_to<R: Read>(entry: &mut R, dst: &Path) -> io::Result<()> {
 /// ZIP 内所有文件是否共享同一个顶层目录；是则返回该目录名，供解压时剥掉。
 ///
 /// 便携包有两种形状都得能更新：文件直接放在根（解压即用），或统一裹一层版本目录
-/// （`WindInput-Portable-0.120/…`）。后者若原样解压，会在便携目录里再解出一层子目录，
+/// （`Moodflow-Portable-0.120/…`）。后者若原样解压，会在便携目录里再解出一层子目录，
 /// 当前文件一个都没更新——这正是「更新当前版本」的故障现象。
 ///
 /// ⚠️ [`validate_zip`] 只按 `file_name` 匹配、对层级无感，带顶层目录的包照样通过校验，
@@ -242,12 +242,26 @@ pub fn same_dir(a: &Path, b: &Path) -> bool {
 }
 
 /// 递归收集 `dir` 下所有文件路径。
-fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
+fn collect_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_dir() {
-            collect_files(&path, out)?;
+        if skip_in_copy(path.strip_prefix(root).map_err(io::Error::other)?) {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(io::Error::other("拒绝复制链接"));
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                return Err(io::Error::other("拒绝复制重解析点"));
+            }
+        }
+        if metadata.is_dir() {
+            collect_files(root, &path, out)?;
         } else {
             out.push(path);
         }
@@ -273,18 +287,25 @@ mod tests {
     fn deploy_from_directory_skips_userdata() {
         let src = tempdir();
         let dst = tempdir();
-        fs::write(src.join("wind_input.exe"), b"exe").unwrap();
+        fs::write(src.join("moodflow_core.exe"), b"exe").unwrap();
         fs::create_dir_all(src.join("data")).unwrap();
         fs::write(src.join("data").join("config.toml"), b"cfg").unwrap();
         fs::create_dir_all(src.join("userdata").join("logs")).unwrap();
         fs::write(src.join("userdata").join("db.redb"), b"user").unwrap();
+        fs::create_dir_all(src.join("localdata").join("vault")).unwrap();
+        fs::write(
+            src.join("localdata").join("vault").join("secret"),
+            b"private",
+        )
+        .unwrap();
 
         deploy_from_directory(&src, &dst).unwrap();
 
-        assert!(dst.join("wind_input.exe").is_file());
+        assert!(dst.join("moodflow_core.exe").is_file());
         assert!(dst.join("data").join("config.toml").is_file());
         // userdata 被跳过。
         assert!(!dst.join("userdata").exists());
+        assert!(!dst.join("localdata").exists());
     }
 
     #[test]
@@ -293,7 +314,7 @@ mod tests {
         // 否则目标会被 is_installed_directory 误判为安装目录、便携模式失效。
         let src = tempdir();
         let dst = tempdir();
-        fs::write(src.join("wind_input.exe"), b"exe").unwrap();
+        fs::write(src.join("moodflow_core.exe"), b"exe").unwrap();
         fs::write(src.join("uninstall.exe"), b"unins").unwrap();
         // 子目录下的同名文件不受影响（仅拦根级）。
         fs::create_dir_all(src.join("tools")).unwrap();
@@ -301,7 +322,7 @@ mod tests {
 
         deploy_from_directory(&src, &dst).unwrap();
 
-        assert!(dst.join("wind_input.exe").is_file());
+        assert!(dst.join("moodflow_core.exe").is_file());
         assert!(!dst.join("uninstall.exe").exists(), "根级卸载器应被跳过");
         assert!(
             dst.join("tools").join("uninstall.exe").is_file(),
@@ -318,15 +339,15 @@ mod tests {
     #[test]
     fn clean_old_files_removes_backups() {
         let d = tempdir();
-        fs::write(d.join("wind_input.exe.old_123"), b"x").unwrap();
-        fs::write(d.join("wind_tsf.dll.new_456"), b"x").unwrap();
+        fs::write(d.join("moodflow_core.exe.old_123"), b"x").unwrap();
+        fs::write(d.join("moodflow_tsf.dll.new_456"), b"x").unwrap();
         fs::write(d.join("config.bak"), b"x").unwrap();
         fs::write(d.join("keep.exe"), b"x").unwrap();
         // 非数字后缀的用户文件不应被误删。
         fs::write(d.join("notes.old_draft.txt"), b"x").unwrap();
         clean_old_files(&d);
-        assert!(!d.join("wind_input.exe.old_123").exists());
-        assert!(!d.join("wind_tsf.dll.new_456").exists());
+        assert!(!d.join("moodflow_core.exe.old_123").exists());
+        assert!(!d.join("moodflow_tsf.dll.new_456").exists());
         assert!(!d.join("config.bak").exists());
         assert!(d.join("keep.exe").is_file());
         assert!(d.join("notes.old_draft.txt").is_file());
@@ -347,7 +368,7 @@ mod tests {
 
         let v = Variant::new(false);
         let err = validate_zip(&zip_path, &v).unwrap_err();
-        assert!(err.to_string().contains("wind_input.exe"));
+        assert!(err.to_string().contains("moodflow_core.exe"));
     }
 
     #[test]
@@ -359,7 +380,7 @@ mod tests {
             let mut w = zip::ZipWriter::new(f);
             let opts: zip::write::FileOptions<()> = zip::write::FileOptions::default();
             use std::io::Write;
-            for name in ["wind_input.exe", "wind_tsf.dll", "data/config.toml"] {
+            for name in ["moodflow_core.exe", "moodflow_tsf.dll", "data/config.toml"] {
                 w.start_file(name, opts).unwrap();
                 w.write_all(b"content").unwrap();
             }
@@ -371,7 +392,7 @@ mod tests {
         let target = tempdir();
         let needs_restart = deploy_from_zip(&zip_path, &target).unwrap();
         assert!(!needs_restart); // 测试进程 exe 不在包内
-        assert!(target.join("wind_input.exe").is_file());
+        assert!(target.join("moodflow_core.exe").is_file());
         assert!(target.join("data").join("config.toml").is_file());
     }
 
@@ -400,9 +421,9 @@ mod tests {
         write_zip(
             &zip_path,
             &[
-                "WindInput-Portable-0.120/wind_input.exe",
-                "WindInput-Portable-0.120/wind_tsf.dll",
-                "WindInput-Portable-0.120/data/config.toml",
+                "Moodflow-Portable-0.120/moodflow_core.exe",
+                "Moodflow-Portable-0.120/moodflow_tsf.dll",
+                "Moodflow-Portable-0.120/data/config.toml",
             ],
         );
 
@@ -411,10 +432,13 @@ mod tests {
 
         let target = tempdir();
         deploy_from_zip(&zip_path, &target).unwrap();
-        assert!(target.join("wind_input.exe").is_file(), "顶层目录未被剥掉");
+        assert!(
+            target.join("moodflow_core.exe").is_file(),
+            "顶层目录未被剥掉"
+        );
         assert!(target.join("data").join("config.toml").is_file());
         assert!(
-            !target.join("WindInput-Portable-0.120").exists(),
+            !target.join("Moodflow-Portable-0.120").exists(),
             "不应再解出一层子目录"
         );
     }
@@ -424,11 +448,11 @@ mod tests {
     fn deploy_from_zip_keeps_layout_when_root_has_files() {
         let d = tempdir();
         let zip_path = d.join("mixed.zip");
-        write_zip(&zip_path, &["wind_input.exe", "data/config.toml"]);
+        write_zip(&zip_path, &["moodflow_core.exe", "data/config.toml"]);
 
         let target = tempdir();
         deploy_from_zip(&zip_path, &target).unwrap();
-        assert!(target.join("wind_input.exe").is_file());
+        assert!(target.join("moodflow_core.exe").is_file());
         assert!(target.join("data").join("config.toml").is_file());
     }
 

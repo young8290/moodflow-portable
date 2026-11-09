@@ -1,4 +1,4 @@
-//! 与 wind_input 核心的极简 RPC 客户端。
+//! 与 moodflow_core 核心的极简 RPC 客户端。
 //!
 //! 复用本仓库已验证的做法（见 `wind_setting`）：命名管道客户端用 `std::fs::File`
 //! （Windows 允许 `OpenOptions` 打开 `\\.\pipe\...`），帧格式为 4 字节大端长度 + JSON，
@@ -39,22 +39,22 @@ struct RpcResponse {
 /// 控制通道端点：Windows 命名管道 / Unix 套接字。
 ///
 /// **两侧的后缀位置不同，且都由服务端 `wind-rpc::server` 决定，不可"对称"地想当然**：
-/// - Windows 管道名后缀在**末尾**：`wind_input_ctrl{suffix}`
-///   （release `wind_input_ctrl`、dev `wind_input_ctrl_dev`）。
-/// - Unix 套接字后缀在**中间**：`wind_input{suffix}_ctrl.sock`。
+/// - Windows 管道名后缀在**末尾**：`moodflow_rpc_ctrl{suffix}`
+///   （release `moodflow_rpc_ctrl`、dev `moodflow_rpc_ctrl_dev`）。
+/// - Unix 套接字后缀在**中间**：`moodflow_rpc{suffix}_ctrl.sock`。
 ///
-/// 曾把 Windows 侧写成 `wind_input{suffix}_ctrl`：release 因 suffix 为空而巧合相等、
+/// 曾把 Windows 侧写成 `moodflow_rpc{suffix}_ctrl`：release 因 suffix 为空而巧合相等、
 /// 一直正常，dev 版则永远连不上（探活恒为"未运行"，实际服务在跑）。
 pub fn ctrl_endpoint(variant: &Variant) -> String {
     let suffix = &variant.pipe_suffix;
     #[cfg(windows)]
     {
-        format!(r"\\.\pipe\wind_input_ctrl{suffix}")
+        format!(r"\\.\pipe\moodflow_rpc_ctrl{suffix}")
     }
     #[cfg(not(windows))]
     {
         let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-        format!("{dir}/wind_input{suffix}_ctrl.sock")
+        format!("{dir}/moodflow_rpc{suffix}_ctrl.sock")
     }
 }
 
@@ -156,13 +156,13 @@ mod tests {
         );
         #[cfg(windows)]
         {
-            assert_eq!(release, r"\\.\pipe\wind_input_ctrl");
-            assert_eq!(dev, r"\\.\pipe\wind_input_ctrl_dev");
+            assert_eq!(release, r"\\.\pipe\moodflow_rpc_ctrl");
+            assert_eq!(dev, r"\\.\pipe\moodflow_rpc_ctrl_dev");
         }
         #[cfg(not(windows))]
         {
-            assert!(release.ends_with("/wind_input_ctrl.sock"));
-            assert!(dev.ends_with("/wind_input_dev_ctrl.sock"));
+            assert!(release.ends_with("/moodflow_rpc_ctrl.sock"));
+            assert!(dev.ends_with("/moodflow_rpc_dev_ctrl.sock"));
         }
     }
 

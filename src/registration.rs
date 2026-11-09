@@ -157,7 +157,7 @@ pub fn register_direct(cfg: &PortableConfig, variant: &Variant) -> Result<()> {
 
     if cfg.system_deploy {
         // 便携目录回指。DLL 搬进系统目录后 `GetModuleFileName` 只能取到系统副本路径，
-        // 服务拉起与便携标记检测都改读这个键（读端 wind_tsf 的 `_ResolveAppBaseDir`）。
+        // 服务拉起与便携标记检测都改读这个键（读端 moodflow_tsf 的 `_ResolveAppBaseDir`）。
         // 必须写在 regsvr32 之前：注册一完成宿主就可能加载 DLL，那时键还不在就会走空。
         // 它同时是本实例对系统副本的所有权凭据——系统副本各实例路径相同，靠路径已分不出
         // 是谁注册的（见 [`owns_system_deployment`]）。
@@ -184,7 +184,7 @@ pub fn register_direct(cfg: &PortableConfig, variant: &Variant) -> Result<()> {
         }
     } else {
         // 默认：就地注册。DLL 留在便携目录，`GetModuleFileName` 推得出便携根，
-        // wind_tsf 的 `_ResolveAppBaseDir` 回退到模块路径即可定位，无需写 InstallDir。
+        // moodflow_tsf 的 `_ResolveAppBaseDir` 回退到模块路径即可定位，无需写 InstallDir。
         grant_app_packages_access(dll);
         regsvr32(dll, false, false)?;
 
@@ -311,7 +311,9 @@ pub fn installed_conflict(
         }
         return Some("检测到另一个便携版实例正在运行，请先停止该实例后再启动。".to_string());
     }
-    Some("系统已注册其他位置的清风输入法，为避免覆盖现有注册信息，便携模式已禁用。".to_string())
+    Some(
+        "系统已注册其他位置的Moodflow 输入法，为避免覆盖现有注册信息，便携模式已禁用。".to_string(),
+    )
 }
 
 /// 冲突位置（用于界面提示）。

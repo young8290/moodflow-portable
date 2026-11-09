@@ -28,6 +28,20 @@ pub fn exists_by_path(target: &Path) -> bool {
         .any(|pid| process_path(pid).is_some_and(|p| p.to_string_lossy().to_lowercase() == target))
 }
 
+/// 是否存在另一目录的同名程序；便携 Hub 不接管安装版的单实例。
+pub fn exists_elsewhere(target: &Path) -> bool {
+    let expected = target.to_string_lossy().to_lowercase();
+    let stem = target
+        .file_name()
+        .map(|s| s.to_string_lossy().to_lowercase());
+    enumerate_pids().into_iter().any(|pid| {
+        process_path(pid).is_some_and(|path| {
+            path.file_name().map(|s| s.to_string_lossy().to_lowercase()) == stem
+                && path.to_string_lossy().to_lowercase() != expected
+        })
+    })
+}
+
 /// 终止所有路径等于 `target` 的进程；返回是否至少终止了一个。
 pub fn terminate_by_path(target: &Path) -> bool {
     let target = target.to_string_lossy().to_lowercase();

@@ -1,7 +1,7 @@
 //! 构建变体探测与常量。
 //!
 //! 与原 C# `BuildVariant` 一致：launcher 是**单一二进制**，运行时探测——若在 exe 同级或
-//! 上级目录发现 `wind_input_dev.exe`（或 `build_dev/wind_input_dev.exe`），切换到开发版
+//! 上级目录发现 `moodflow_core_dev.exe`（或 `build_dev/moodflow_core_dev.exe`），切换到开发版
 //! 变体；否则发布版。开发版与发布版用**不同的** CLSID/Profile/管道/目录/Mutex，彼此隔离。
 
 use std::path::{Path, PathBuf};
@@ -57,14 +57,14 @@ pub fn set_system_deploy_marker(dir: &Path, on: bool) -> std::io::Result<()> {
 /// 便携数据目录名（相对便携包根目录）。
 pub const PORTABLE_DATA_DIR: &str = "userdata";
 
-// 发布版 GUID 串（与 wind_tsf Globals / C# BuildVariant 对齐）。
-const CLSID_RELEASE: &str = "{99C2EE30-5C57-45A2-9C63-FB54B34FD90A}";
+// 发布版 GUID 串（与 moodflow_tsf Globals / C# BuildVariant 对齐）。
+const CLSID_RELEASE: &str = "{EF62EE30-5ECF-413A-A476-48D1F29E827C}";
 const PROFILE_RELEASE: &str =
-    "0804:{99C2EE30-5C57-45A2-9C63-FB54B34FD90A}{99C2EE31-5C57-45A2-9C63-FB54B34FD90A}";
+    "0804:{EF62EE30-5ECF-413A-A476-48D1F29E827C}{EF62EE31-5ECF-413A-A476-48D1F29E827C}";
 // 开发版 GUID 串。
-const CLSID_DEV: &str = "{99C2DEB0-5C57-45A2-9C63-FB54B34FD90A}";
+const CLSID_DEV: &str = "{EF62DEB0-5ECF-413A-A476-48D1F29E827C}";
 const PROFILE_DEV: &str =
-    "0804:{99C2DEB0-5C57-45A2-9C63-FB54B34FD90A}{99C2DEB1-5C57-45A2-9C63-FB54B34FD90A}";
+    "0804:{EF62DEB0-5ECF-413A-A476-48D1F29E827C}{EF62DEB1-5ECF-413A-A476-48D1F29E827C}";
 
 /// 变体下的全部名称/常量。`new(is_dev)` 一次性算出。
 #[derive(Debug, Clone)]
@@ -78,15 +78,15 @@ pub struct Variant {
     pub clsid: &'static str,
     /// InstallLayoutOrTip 的 profile 串。
     pub profile_str: &'static str,
-    /// 服务可执行名，如 `wind_input.exe`。
+    /// 服务可执行名，如 `moodflow_core.exe`。
     pub service_name: String,
     /// 设置程序可执行名，如 `wind_setting.exe`。
     pub setting_name: String,
-    /// TSF x64 DLL 名，如 `wind_tsf.dll`。
+    /// TSF x64 DLL 名，如 `moodflow_tsf.dll`。
     pub dll_name: String,
-    /// TSF x86 DLL 名，如 `wind_tsf_x86.dll`。
+    /// TSF x86 DLL 名，如 `moodflow_tsf_x86.dll`。
     pub dll_name_x86: String,
-    /// RPC 控制管道后缀（端点为 `\\.\pipe\wind_input{suffix}_ctrl`）。
+    /// RPC 控制管道后缀（端点为 `\\.\pipe\moodflow_rpc_ctrl{suffix}`）。
     pub pipe_suffix: String,
     /// 单实例 Mutex 名。
     pub mutex_name: String,
@@ -99,19 +99,19 @@ impl Variant {
         Variant {
             is_dev,
             display_name: if is_dev {
-                "清风输入法开发版"
+                "Moodflow 输入法开发版"
             } else {
-                "清风输入法"
+                "Moodflow 输入法"
             },
-            app_name: if is_dev { "WindInputDev" } else { "WindInput" },
+            app_name: if is_dev { "MoodflowDev" } else { "Moodflow" },
             clsid: if is_dev { CLSID_DEV } else { CLSID_RELEASE },
             profile_str: if is_dev { PROFILE_DEV } else { PROFILE_RELEASE },
-            service_name: format!("wind_input{suffix}.exe"),
+            service_name: format!("moodflow_core{suffix}.exe"),
             setting_name: format!("wind_setting{suffix}.exe"),
-            dll_name: format!("wind_tsf{suffix}.dll"),
-            dll_name_x86: format!("wind_tsf_x86{suffix}.dll"),
+            dll_name: format!("moodflow_tsf{suffix}.dll"),
+            dll_name_x86: format!("moodflow_tsf_x86{suffix}.dll"),
             pipe_suffix: suffix.to_string(),
-            mutex_name: format!(r"Local\WindPortableLauncher{suffix}"),
+            mutex_name: format!(r"Local\MoodflowPortableLauncher{suffix}"),
         }
     }
 
@@ -135,12 +135,15 @@ fn detect_dev() -> bool {
     detect_dev_in(&dirs)
 }
 
-/// 纯逻辑：给定候选目录集，判断是否存在 `wind_input_dev.exe`
+/// 纯逻辑：给定候选目录集，判断是否存在 `moodflow_core_dev.exe`
 /// （直接同级，或 `build_dev/` 子目录下）。
 pub fn detect_dev_in(dirs: &[PathBuf]) -> bool {
     dirs.iter().any(|dir| {
-        dir.join("wind_input_dev.exe").is_file()
-            || dir.join("build_dev").join("wind_input_dev.exe").is_file()
+        dir.join("moodflow_core_dev.exe").is_file()
+            || dir
+                .join("build_dev")
+                .join("moodflow_core_dev.exe")
+                .is_file()
     })
 }
 
@@ -158,12 +161,12 @@ mod tests {
         let v = Variant::new(false);
         assert!(!v.is_dev);
         assert_eq!(v.pipe_suffix, "");
-        assert_eq!(v.service_name, "wind_input.exe");
+        assert_eq!(v.service_name, "moodflow_core.exe");
         assert_eq!(v.setting_name, "wind_setting.exe");
-        assert_eq!(v.dll_name, "wind_tsf.dll");
-        assert_eq!(v.dll_name_x86, "wind_tsf_x86.dll");
-        assert_eq!(v.app_name, "WindInput");
-        assert_eq!(v.mutex_name, r"Local\WindPortableLauncher");
+        assert_eq!(v.dll_name, "moodflow_tsf.dll");
+        assert_eq!(v.dll_name_x86, "moodflow_tsf_x86.dll");
+        assert_eq!(v.app_name, "Moodflow");
+        assert_eq!(v.mutex_name, r"Local\MoodflowPortableLauncher");
         assert_eq!(v.clsid, CLSID_RELEASE);
     }
 
@@ -172,12 +175,12 @@ mod tests {
         let v = Variant::new(true);
         assert!(v.is_dev);
         assert_eq!(v.pipe_suffix, "_dev");
-        assert_eq!(v.service_name, "wind_input_dev.exe");
-        assert_eq!(v.dll_name_x86, "wind_tsf_x86_dev.dll");
-        assert_eq!(v.app_name, "WindInputDev");
-        assert_eq!(v.mutex_name, r"Local\WindPortableLauncher_dev");
+        assert_eq!(v.service_name, "moodflow_core_dev.exe");
+        assert_eq!(v.dll_name_x86, "moodflow_tsf_x86_dev.dll");
+        assert_eq!(v.app_name, "MoodflowDev");
+        assert_eq!(v.mutex_name, r"Local\MoodflowPortableLauncher_dev");
         assert_eq!(v.clsid, CLSID_DEV);
-        assert_eq!(v.display_name, "清风输入法开发版");
+        assert_eq!(v.display_name, "Moodflow 输入法开发版");
     }
 
     #[test]
@@ -186,12 +189,12 @@ mod tests {
         // 无文件 → 发布版。
         assert!(!detect_dev_in(std::slice::from_ref(&tmp)));
         // 同级直接放 → 开发版。
-        std::fs::write(tmp.join("wind_input_dev.exe"), b"x").unwrap();
+        std::fs::write(tmp.join("moodflow_core_dev.exe"), b"x").unwrap();
         assert!(detect_dev_in(std::slice::from_ref(&tmp)));
-        std::fs::remove_file(tmp.join("wind_input_dev.exe")).unwrap();
+        std::fs::remove_file(tmp.join("moodflow_core_dev.exe")).unwrap();
         // build_dev 子目录 → 开发版。
         std::fs::create_dir_all(tmp.join("build_dev")).unwrap();
-        std::fs::write(tmp.join("build_dev").join("wind_input_dev.exe"), b"x").unwrap();
+        std::fs::write(tmp.join("build_dev").join("moodflow_core_dev.exe"), b"x").unwrap();
         assert!(detect_dev_in(std::slice::from_ref(&tmp)));
     }
 

@@ -1,10 +1,10 @@
 // 为 wind_portable.exe 嵌入 Windows 资源：图标 / 版本信息 / 应用清单(manifest)。
 //
-// 用 winresource（与 wind_input 同款）而非 embed-resource：后者在原生 windows CI 上
+// 用 winresource（与 moodflow_core 同款）而非 embed-resource：后者在原生 windows CI 上
 // rc.exe 编译失败，会导致图标 + manifest 一起丢失，而 manifest 缺失是**致命**的 ——
 // windui 静态导入 comctl32 v6 的 TaskDialogIndirect，无 Common-Controls 6.0 manifest 时
 // 加载器绑到 comctl32 v5（不导出该函数）→「无法定位程序输入点 TaskDialogIndirect」→
-// exe 根本无法启动。winresource 在同一 CI 环境下(wind_input)已验证可正常嵌入。
+// exe 根本无法启动。winresource 在同一 CI 环境下(moodflow_core)已验证可正常嵌入。
 //
 // build.rs 运行在 host，按**目标**平台判断（CARGO_CFG_TARGET_OS）；仅 Windows 目标生效。
 
@@ -14,13 +14,13 @@ fn main() {
     }
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 
-    // 版本优先级: WIND_APP_VERSION(WindInput 打包脚本/CI 从 docs/VERSION 注入)
+    // 版本优先级: MOODFLOW_APP_VERSION(Moodflow 打包脚本/CI 从 docs/VERSION 注入)
     //           > {manifest}/../docs/VERSION 文件 > CARGO_PKG_VERSION。
-    // 注: 本仓是独立 sibling, {manifest}/../docs/VERSION 通常不指向 WindInput/docs/VERSION
-    //     (层级不符, 一般落空), 故主要依赖 WIND_APP_VERSION 注入, 与主仓 / 安装包统一。
-    println!("cargo:rerun-if-env-changed=WIND_APP_VERSION");
+    // 注: 本仓是独立 sibling, {manifest}/../docs/VERSION 通常不指向 Moodflow/docs/VERSION
+    //     (层级不符, 一般落空), 故主要依赖 MOODFLOW_APP_VERSION 注入, 与主仓 / 安装包统一。
+    println!("cargo:rerun-if-env-changed=MOODFLOW_APP_VERSION");
     let version_file = format!("{manifest_dir}/../docs/VERSION");
-    let ver = std::env::var("WIND_APP_VERSION")
+    let ver = std::env::var("MOODFLOW_APP_VERSION")
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
@@ -64,19 +64,16 @@ fn main() {
     res.set_icon_with_id(&ico, "1");
     res.set_manifest(manifest_xml);
     res.set_language(0x0804); // 简体中文：版本信息语言块
-    res.set("CompanyName", "清风输入法");
-    res.set("FileDescription", "清风输入法启动器");
+    res.set("CompanyName", "Moodflow 输入法");
+    res.set("FileDescription", "Moodflow 输入法启动器");
     res.set("FileVersion", &ver);
     res.set("InternalName", "wind_portable");
-    res.set("LegalCopyright", "Copyright © 清风输入法");
+    res.set("LegalCopyright", "Copyright © Moodflow 输入法");
     res.set("OriginalFilename", "wind_portable.exe");
-    res.set("ProductName", "清风输入法");
+    res.set("ProductName", "Moodflow 输入法");
     res.set("ProductVersion", &ver);
     res.set_version_info(winresource::VersionInfo::FILEVERSION, ver_u64);
     res.set_version_info(winresource::VersionInfo::PRODUCTVERSION, ver_u64);
-    if let Err(e) = res.compile() {
-        // 注意：manifest 缺失会致 exe 无法启动（缺 TaskDialogIndirect 入口），
-        // 不能当外观问题轻视 —— 发布链应把此警告视为构建失败对待。
-        println!("cargo:warning=app 资源嵌入失败: {e}");
-    }
+    res.compile()
+        .expect("Moodflow launcher resources could not be embedded");
 }

@@ -2,10 +2,10 @@
 name = "wind_portable"
 version = "0.0.1-alpha"
 edition = "2021"
-description = "清风输入法便携启动器（绿色版）"
+description = "Moodflow 输入法便携启动器（绿色版）"
 license = "MIT"
-repository = "https://github.com/huanfeng/wind-portable"
-homepage = "https://windinput.com"
+repository = "https://github.com/young8290/moodflow-portable"
+homepage = "https://github.com/young8290/Moodflow"
 readme = "README.md"
 
 [[bin]]
@@ -59,3 +59,5 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[workspace]

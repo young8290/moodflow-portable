@@ -105,9 +105,9 @@ fn post_close(hwnd: Option<windows::Win32::Foundation::HWND>) {
 
 pub fn launcher_title(variant: &Variant) -> String {
     if variant.is_dev {
-        "清风输入法便携启动器 (Dev)".to_string()
+        "Moodflow 输入法便携启动器 (Dev)".to_string()
     } else {
-        "清风输入法便携启动器".to_string()
+        "Moodflow 输入法便携启动器".to_string()
     }
 }
 
@@ -505,7 +505,7 @@ impl Ui {
                     let answer = dialog::ask_commands(
                         owner,
                         &title,
-                        "清风输入法仍处于已启用状态",
+                        "Moodflow 输入法仍处于已启用状态",
                         ("停止服务并卸载", "移除开机自启与 TSF 注册"),
                         ("仅关闭启动器", "输入法继续可用，稍后可再启动"),
                     );

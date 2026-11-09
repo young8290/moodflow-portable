@@ -70,9 +70,11 @@ pub fn detect_from(variant: &Variant, candidates: &[PathBuf]) -> Result<Portable
         let icon_path = first_existing(&[
             root.join("wind_portable")
                 .join("res")
-                .join("wind_input_portable.ico"),
-            root.join("res").join("wind_input_portable.ico"),
-            root.join("wind_tsf").join("res").join("wind_input.ico"),
+                .join("moodflow_core_portable.ico"),
+            root.join("res").join("moodflow_core_portable.ico"),
+            root.join("moodflow_tsf")
+                .join("res")
+                .join("moodflow_core.ico"),
         ]);
         let userdata_dir = variant::portable_data_dir(root);
         return Ok(PortableConfig {
@@ -208,11 +210,11 @@ mod tests {
     fn detect_finds_service_in_root() {
         let v = Variant::new(false);
         let root = tempdir();
-        std::fs::write(root.join("wind_input.exe"), b"x").unwrap();
-        std::fs::write(root.join("wind_tsf.dll"), b"x").unwrap();
+        std::fs::write(root.join("moodflow_core.exe"), b"x").unwrap();
+        std::fs::write(root.join("moodflow_tsf.dll"), b"x").unwrap();
         let cfg = detect_from(&v, std::slice::from_ref(&root)).unwrap();
-        assert_eq!(cfg.service_exe, root.join("wind_input.exe"));
-        assert_eq!(cfg.tsf_dll, Some(root.join("wind_tsf.dll")));
+        assert_eq!(cfg.service_exe, root.join("moodflow_core.exe"));
+        assert_eq!(cfg.tsf_dll, Some(root.join("moodflow_tsf.dll")));
         assert_eq!(cfg.tsf_dll_x86, None);
         assert_eq!(cfg.userdata_dir, root.join("userdata"));
         assert_eq!(cfg.portable_marker, root.join("portable_mode"));
@@ -228,8 +230,8 @@ mod tests {
     fn system_deploy_defaults_off_and_opts_in_by_marker() {
         let v = Variant::new(false);
         let root = tempdir();
-        std::fs::write(root.join("wind_input.exe"), b"x").unwrap();
-        std::fs::write(root.join("wind_tsf.dll"), b"x").unwrap();
+        std::fs::write(root.join("moodflow_core.exe"), b"x").unwrap();
+        std::fs::write(root.join("moodflow_tsf.dll"), b"x").unwrap();
 
         let cfg = detect_from(&v, std::slice::from_ref(&root)).unwrap();
         assert!(!cfg.system_deploy, "无标记时必须默认就地部署");
@@ -247,11 +249,11 @@ mod tests {
         let v = Variant::new(false);
         let root = tempdir();
         std::fs::create_dir_all(root.join("build_dev")).unwrap();
-        std::fs::write(root.join("build_dev").join("wind_input.exe"), b"x").unwrap();
+        std::fs::write(root.join("build_dev").join("moodflow_core.exe"), b"x").unwrap();
         let cfg = detect_from(&v, std::slice::from_ref(&root)).unwrap();
         assert_eq!(
             cfg.service_exe,
-            root.join("build_dev").join("wind_input.exe")
+            root.join("build_dev").join("moodflow_core.exe")
         );
         assert_eq!(cfg.root_dir, root);
     }
@@ -266,7 +268,7 @@ mod tests {
     fn detect_succeeds_inside_protected_dir() {
         let v = Variant::new(false);
         let root = tempdir();
-        std::fs::write(root.join("wind_input.exe"), b"x").unwrap();
+        std::fs::write(root.join("moodflow_core.exe"), b"x").unwrap();
         // 把 root 自身当作"保护目录前缀"，确认判定确实命中……
         let prefixes = vec![root.to_string_lossy().to_string()];
         assert!(is_protected_under(&root.join("sub"), &prefixes));
@@ -280,16 +282,16 @@ mod tests {
         let v = Variant::new(false);
         let root = tempdir();
         let err = detect_from(&v, &[root]).unwrap_err();
-        assert!(err.to_string().contains("wind_input.exe"));
+        assert!(err.to_string().contains("moodflow_core.exe"));
     }
 
     #[test]
     fn dev_variant_finds_dev_service() {
         let v = Variant::new(true);
         let root = tempdir();
-        std::fs::write(root.join("wind_input_dev.exe"), b"x").unwrap();
+        std::fs::write(root.join("moodflow_core_dev.exe"), b"x").unwrap();
         let cfg = detect_from(&v, std::slice::from_ref(&root)).unwrap();
-        assert_eq!(cfg.service_exe, root.join("wind_input_dev.exe"));
+        assert_eq!(cfg.service_exe, root.join("moodflow_core_dev.exe"));
     }
 
     #[test]
